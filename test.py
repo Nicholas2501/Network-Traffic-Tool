@@ -1,10 +1,11 @@
-from scapy.all import sniff, wrpcap
+from scapy.all import sniff, wrpcap, rdpcap
 from scapy.layers.inet import IP
 from datetime import datetime
 import time
 import threading
 import csv
 import os
+import sys
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
@@ -165,6 +166,17 @@ def save_packets():
     else:
         print("No packets captured to save.")
 
+# load packets from a file
+def load_packets(filename):
+    global captured_packets
+    captured_packets = rdpcap(filename)
+    if captured_packets:
+        print(f"Finished loading packets from {filename}")
+        inspect_packets()
+    else:
+        print(f"Could not load file {filename}.")
+
+
 # Save datagram logs
 def save_log():
     if datagram_log:
@@ -222,8 +234,13 @@ def start_graph():
 # Entry point
 if __name__ == "__main__":
     try:
-        filter_option = input("Enter filter (e.g., 'tcp', 'udp', 'port 80', or leave blank for all): ").strip()
-        start_sniffing(filter_option)
+        if(len(sys.argv)==2):
+            # load packets and go into inspect mode
+            load_packets(sys.argv[1])
+        else:
+            # prompt and go into live mode
+            filter_option = input("Enter filter (e.g., 'tcp', 'udp', 'port 80', or leave blank for all): ").strip()
+            start_sniffing(filter_option)
     except KeyboardInterrupt:
         print("\n🛑 Final interrupt received. Exiting now.")
     finally:
