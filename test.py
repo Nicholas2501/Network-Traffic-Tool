@@ -1,5 +1,6 @@
 from scapy.all import sniff, wrpcap, rdpcap
 from scapy.layers.inet import IP
+from scapy.error import Scapy_Exception
 from datetime import datetime
 import time
 import threading
@@ -20,6 +21,9 @@ start_time = time.time()
 
 # Lock for thread safety
 lock = threading.Lock()
+
+# Sampling interval in milliseconds
+SAMPLE_TIME_MS = 1000
 
 # Thresholds for anomaly detection
 PPS_THRESHOLD = 20     # Packets per second
@@ -45,7 +49,7 @@ def analyze_traffic():
     global packet_count, data_transferred, start_time
 
     while True and not stop_sniffing_flag:
-        time.sleep(5)
+        time.sleep(SAMPLE_TIME_MS / 1000)
         
         with lock:
             elapsed_time = time.time() - start_time
@@ -169,12 +173,23 @@ def save_packets():
 # load packets from a file
 def load_packets(filename):
     global captured_packets
-    captured_packets = rdpcap(filename)
-    if captured_packets:
-        print(f"Finished loading packets from {filename}")
-        inspect_packets()
-    else:
-        print(f"Could not load file {filename}.")
+
+    absolute_path = filename
+    filename_only_path = os.path.join(SAVE_DIRECTORY, filename)
+
+    try:
+        if os.path.isfile(absolute_path):
+            captured_packets = rdpcap(absolute_path)
+        elif os.path.isfile(filename_only_path):
+            captured_packets = rdpcap(filename_only_path)
+
+        if captured_packets:
+            print(f"Loaded packets from '{filename}'")
+            inspect_packets()
+        else:
+            print(f"Error: Could not load file '{filename}'")
+    except Scapy_Exception:
+        print(f"Error: '{filename}' is either corrupt or not a .pcap file")
 
 
 # Save datagram logs
@@ -228,7 +243,7 @@ def update_graph(i):
     plt.tight_layout()
 
 def start_graph():
-    ani = FuncAnimation(plt.gcf(), update_graph, interval=1000)
+    ani = FuncAnimation(plt.gcf(), update_graph, interval=SAMPLE_TIME_MS)
     plt.show()
 
 # Entry point
