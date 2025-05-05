@@ -32,7 +32,6 @@ BPS_THRESHOLD = 100000 # Bits per second (bps)
 # Define a relative directory for saving files
 SAVE_DIRECTORY = "./output"
 os.makedirs(SAVE_DIRECTORY, exist_ok=True)
-print(f"Saving files to directory: {os.path.abspath(SAVE_DIRECTORY)}")
 
 # Protocol count dictionary
 protocol_count = {"TCP": 0, "UDP": 0, "ICMP": 0, "Other": 0}
@@ -183,13 +182,13 @@ def load_packets(filename):
         elif os.path.isfile(filename_only_path):
             captured_packets = rdpcap(filename_only_path)
 
-        if captured_packets:
+        if captured_packets:    # if both isfile checks fail, captured_packets will be empty
             print(f"Loaded packets from '{filename}'")
             inspect_packets()
         else:
-            print(f"Error: Could not load file '{filename}'")
+            print(f"Error: Could not find file '{filename}'")
     except Scapy_Exception:
-        print(f"Error: '{filename}' is either corrupt or not a .pcap file")
+        print(f"Error: '{filename}' could not be read. Make sure it is a .pcap file")
 
 
 # Save datagram logs
@@ -203,6 +202,25 @@ def save_log():
         print(f"📝 Datagram log saved to {filename}")
     else:
         print("No datagrams to log.")
+
+# load datagram logs from file
+def load_log(filename):
+    global datagram_log
+
+    if os.path.isfile(filename):
+        path = filename
+    else:
+        path = os.path.join(SAVE_DIRECTORY, filename)
+    
+    try:
+        with open(path, newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                datagram_log.append(row)
+    except:
+        print("Unable to read log file. Graph and timestamps will be unavailable.")
+    else:
+        generate_graph()
 
 # Packet inspection interface
 def inspect_packets():
@@ -233,6 +251,29 @@ def inspect_packets():
             print("\n🛑 Interrupted. Returning to main program.")
             os._exit(0)  # Exit the program completely
 
+
+# For constructing a graph of existing log data
+def generate_graph():
+    current_pps = 0
+    current_timestamp = None
+    for row in datagram_log:
+        if current_timestamp is None:
+            current_timestamp = row['timestamp']
+            current_pps += 1
+        if current_timestamp == row['timestamp']:
+            current_pps += 1
+        else:
+            pps_data.append(current_pps)
+            time_data.append(len(pps_data))
+            current_pps = 0
+            current_timestamp = row['timestamp']
+    
+    plt.cla() 
+    plt.plot(time_data, pps_data, label="Packets per Second")
+    plt.legend(loc="upper left")
+    plt.tight_layout()
+    plt.show(block=False)
+
 # Live graph
 def update_graph(i):
     pps_data.append(packet_count)
@@ -249,11 +290,16 @@ def start_graph():
 # Entry point
 if __name__ == "__main__":
     try:
-        if(len(sys.argv)==2):
-            # load packets and go into inspect mode
+        if(len(sys.argv)==3):
+            print("Loading files...")
+            load_log(sys.argv[2])
+            load_packets(sys.argv[1])
+        elif(len(sys.argv)==2):
+            print("Loading packets...")
             load_packets(sys.argv[1])
         else:
             # prompt and go into live mode
+            print(f"Saving files to directory: {os.path.abspath(SAVE_DIRECTORY)}")
             filter_option = input("Enter filter (e.g., 'tcp', 'udp', 'port 80', or leave blank for all): ").strip()
             start_sniffing(filter_option)
     except KeyboardInterrupt:
