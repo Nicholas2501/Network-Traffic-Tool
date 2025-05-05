@@ -2,6 +2,8 @@ from scapy.all import sniff, wrpcap, rdpcap
 from scapy.layers.inet import IP
 from scapy.error import Scapy_Exception
 from datetime import datetime
+from tkinter import messagebox
+import tkinter as tk
 import time
 import threading
 import csv
@@ -26,7 +28,7 @@ lock = threading.Lock()
 SAMPLE_TIME_MS = 1000
 
 # Thresholds for anomaly detection
-PPS_THRESHOLD = 20     # Packets per second
+PPS_THRESHOLD = 200    # Packets per second
 BPS_THRESHOLD = 100000 # Bits per second (bps)
 
 # Define a relative directory for saving files
@@ -40,12 +42,15 @@ protocol_count = {"TCP": 0, "UDP": 0, "ICMP": 0, "Other": 0}
 pps_data = []
 time_data = []
 
+ALERT_PACKET_COUNT = 200  # You can adjust this threshold
+alert_shown = False
+
 # Shared variable to control sniffing
 stop_sniffing_flag = False
 
 # Function to analyze live traffic
 def analyze_traffic():
-    global packet_count, data_transferred, start_time
+    global packet_count, data_transferred, start_time, alert_shown
 
     while True and not stop_sniffing_flag:
         time.sleep(SAMPLE_TIME_MS / 1000)
@@ -64,6 +69,15 @@ def analyze_traffic():
             if pps > PPS_THRESHOLD or bps > BPS_THRESHOLD:
                 print("⚠️ Anomaly detected: Traffic spike! Possible DDoS?")
 
+            if packet_count > ALERT_PACKET_COUNT and not alert_shown:
+                alert_shown = True
+                threading.Thread(target=show_alert_popup, args=(
+                    f"High packet volume detected!\nPackets: {packet_count}",), daemon=True).start()
+                    
+            if packet_count < ALERT_PACKET_COUNT and alert_shown:
+                alert_shown = False
+
+
             packet_count = 0
             data_transferred = 0
             start_time = time.time()
@@ -74,6 +88,13 @@ def detect_anomalies(packet):
     with lock:
         packet_count += 1
         data_transferred += len(packet)
+        
+
+def show_alert_popup(message):
+    root = tk.Tk()
+    root.withdraw()  # Hide the main tkinter window
+    messagebox.showwarning("Traffic Alert", message)
+    root.destroy()
 
 # Callback for each packet
 def packet_callback(packet):
